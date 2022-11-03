@@ -1,0 +1,231 @@
+---
+title: "Final Project"
+author: 'Nathanael Nam SID: 005751279 Lecture: 1 Section: 1A'
+date: '2022-07-20'
+output: pdf_document
+---
+
+```{r}
+cars_test <- read.csv("SummercarsTestNoY.csv")
+cars_train <- read.csv("SummercarsTrain.csv")
+library(corrplot)
+library(ggplot2)
+library(ggfortify)
+library(GGally)
+library(car)
+library(leaps)
+library(stringr)
+library(MASS)
+```
+
+Overview of the Data
+
+
+```{r}
+dim(cars_train)
+
+names(cars_train)
+
+summary(cars_train$PriceNew)
+ggplot(data = cars_train, aes(y = PriceNew)) + geom_boxplot() + ggtitle("Boxplot of PriceNew Variable")
+```
+
+
+
+
+```{r}
+corr_list_numeric <- round(cor(x = cars_train[sapply(cars_train, is.numeric)], y = cars_train$PriceNew), 3)
+corr_list_numeric
+
+full.mod <- lm(PriceNew ~., data = cars_train)
+summary(full.mod)
+autoplot(full.mod)
+```
+
+Creating an initial model based off of high R Squared for the numeric variables using the leaps package
+
+```{r}
+l <- cars_train[, sapply(cars_train, is.numeric)]
+t <- l[, 1:15]
+out <- regsubsets(x = t, y = cars_train$PriceNew, method = "exhaustive", nvmax = 16)
+summary(out)
+
+
+plot(out, scale = "adjr2")
+plot(out, scale = "bic")
+
+plot(1:15,summary(out)$bic) 
+lines(1:15,summary(out)$bic) 
+
+
+plot(1:15,summary(out)$adjr2) 
+lines(1:15,summary(out)$adjr2) 
+
+which.max(summary(out)$adjr2)
+which.min(summary(out)$bic)
+which.min(summary(out)$cp)
+
+out.f <- regsubsets(x = t, y = cars_train$PriceNew, method = "forward", nvmax = 16)
+summary(out.f)
+
+
+plot(out.f, scale = "bic")
+plot(out.f, scale = "adjr2")
+
+which.max(summary(out.f)$adjr2)
+which.min(summary(out.f)$bic)
+which.min(summary(out.f)$cp)
+
+out.b <- regsubsets(x = t, y = cars_train$PriceNew, method = "backward", nvmax = 16)
+summary(out.b)
+plot(out.b, scale = "bic")
+plot(out.b, scale = "adjr2")
+
+which.max(summary(out.b)$adjr2)
+which.min(summary(out.b)$bic)
+which.min(summary(out.b)$cp)
+```
+
+Through observation we can see that our best variables are MPG.highway, Horsepower, RPM, Rev.per.mile, Passengers, Length, Width, Turn.circle, Wheelbase
+
+
+We will create an initial linear model with these variables
+
+```{r}
+m1 <- lm(PriceNew ~ MPG.highway + Horsepower + RPM + Rev.per.mile + Passengers + Length + Width + Turn.circle, data = cars_train)
+summary(m1)
+```
+
+
+Add the categorical variables with the highest correlation to PriceNew
+The highest correlation of the categorical variables are Make, Type, Origin, AirBags
+Since we cannot use Make by itself I have modidifed it to depict the region in which the car was manufactured
+
+```{r}
+cars_train$MakeNew <- character(length(cars_train$Make))
+for (i in seq_len(length(cars_train$MakeNew))){
+if(word(cars_train$Make[i], 1) %in% c("Acura", "Honda", "Lexus", "Infiniti", "Mazda", "Mitsubishi", "Subaru", "Toyota", "Nissan", "Suzuki", "Hyundai", "Kia")) {cars_train$MakeNew[i] <- "Asia"}
+
+if(word(cars_train$Make[i], 1) %in% c("Audi", "BMW", "Mercedes-Benz", "Volkswagen", "Saab", "Volvo")) {cars_train$MakeNew[i] <- "Europe"}
+
+if(word(cars_train$Make[i], 1) %in% c("Buick","Cadillac", "Chevrolet", "Chrysler", "Dodge", "Eagle", "Ford", "Geo", "Lincoln", "Mercury", "Oldsmobile", "Plymouth", "Pontiac", "Saturn")) {cars_train$MakeNew[i] <- "USA"}
+}
+
+
+cars_test$MakeNew <- character(length(cars_test$Make))
+for (i in seq_len(length(cars_test$MakeNew))){
+if(word(cars_test$Make[i], 1) %in% c("Acura", "Honda", "Lexus", "Infiniti", "Mazda", "Mitsubishi", "Subaru", "Toyota", "Nissan", "Suzuki", "Hyundai", "Kia")) {cars_test$MakeNew[i] <- "Asia"}
+
+if(word(cars_test$Make[i], 1) %in% c("Audi", "BMW", "Mercedes-Benz", "Volkswagen", "Saab", "Volvo")) {cars_test$MakeNew[i] <- "Europe"}
+
+if(word(cars_test$Make[i], 1) %in% c("Buick","Cadillac", "Chevrolet", "Chrysler", "Dodge", "Eagle", "Ford", "Geo", "Lincoln", "Mercury", "Oldsmobile", "Plymouth", "Pontiac", "Saturn")) {cars_test$MakeNew[i] <- "USA"}
+}
+```
+
+Create a new category in the dataset with the region of origin based on the brand of the car.
+
+Testing the new linear regression models and checking for conditions.
+
+```{r}
+m2 <- lm(PriceNew ~ MPG.highway + Horsepower + RPM + Rev.per.mile + Passengers + Length + Width + Turn.circle + MakeNew + Type + AirBags, data = cars_train)
+summary(m2)
+vif(m2) 
+autoplot(m2)
+```
+
+
+```{r}
+m3 <- lm(PriceNew ~ MPG.highway + Horsepower + RPM + Rev.per.mile + Length + MakeNew + Type + AirBags, data = cars_train)
+summary(m3)
+vif(m3)
+```
+
+
+```{r}
+m4 <- lm(PriceNew ~ MPG.highway + Horsepower + Rev.per.mile + Length + + MakeNew + AirBags, data = cars_train)
+summary(m4)
+vif(m4)
+
+```
+
+Removing and testing variables to find a better model:
+
+
+Now we can start transforming variables because of the conditions.
+
+```{r}
+summary(powerTransform(cbind(PriceNew,Horsepower,MPG.highway,Length)~1,data=cars_train))
+
+m5 <- lm(PriceNew^(-.5) ~ Horsepower + Length + MakeNew + AirBags + Type, data = cars_train)
+summary(m5)
+vif(m5)
+autoplot(m5)
+```
+
+
+```{r}
+autoplot(m5)[[1]]
+autoplot(m5)[[2]]
+autoplot(m5)[[3]]
+autoplot(m5)[[4]]
+leveragePlots(m5)
+
+```
+
+
+
+```{r}
+cook<-cooks.distance(m5) 
+qplot(fitted.values(m5),cook)+geom_hline(yintercept =  4/(length(cars_train$PriceNew)-4),col="red", linetype="dashed") + ggtitle("Cook's Distance against Fitted Values") + scale_x_continuous(name = "Fitted Values") + scale_y_continuous(name = "Cook's Distance")
+
+
+
+STD.Res<-rstandard(m5) 
+qplot(fitted.values(m5),STD.Res)+geom_hline(yintercept =c(-2,2),col="red", linetype="dashed") + ggtitle("STDRes against Fitted Values") + scale_x_continuous(name = "Fitted Values") + scale_y_continuous(name = "STDRes")
+
+
+cooksd <- cooks.distance(m5)
+sample_size <- nrow(cars_train)
+influential <- as.numeric(names(cooksd)[(cooksd > (4/sample_size))])
+
+cars_train_new <- cars_train[-influential, ]
+```
+
+```{r}
+m6 <- lm(PriceNew^(-.5) ~ Horsepower + Length + MakeNew + AirBags + Type, data = cars_train_new)
+summary(m6)
+vif(m6)
+leveragePlots(m6)
+autoplot(m6)
+
+
+ggpairs(cars_train[c(3,8,14,23)])
+
+attempt_3 <- (predict(m6, newdata = cars_test))^(-2)
+summary(attempt_3)
+
+write.csv(attempt_3, "/Users/nathanaelnam/Desktop/Stats 101A/Week 4/Attempt 3.csv")
+
+
+m7 <- lm(PriceNew ~ Horsepower + Length + MakeNew + AirBags + Type, data = cars_train)
+autoplot(m7)
+autoplot(m7)[[1]]
+autoplot(m7)[[2]]
+autoplot(m7)[[3]]
+autoplot(m7)[[4]]
+vif(m7)
+leveragePlots(m7)
+
+```
+
+
+```{r}
+
+
+write.csv(cars_train_new, "/Users/nathanaelnam/Desktop/Stats 101A/cars_train_new.csv")
+
+cars_test_new <- cars_test
+write.csv(cars_test_new, "/Users/nathanaelnam/Desktop/Stats 101A/cars_test_new.csv")
+```
+
+
